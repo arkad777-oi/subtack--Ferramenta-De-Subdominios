@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import requests
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
@@ -58,10 +57,6 @@ def filter_subs(subs, site):
 # Funções principais
 # -----------------------------
 def peganomes(host, subs):
-    print("Bem Vindo a Ferramenta!")
-    print("--------------------------------------------------------------------------")
-    print("os nomes que pegamos estão aqui:")
-
     def check(sub, host):
         hostname = f"{sub}.{host}"
         try:
@@ -69,34 +64,33 @@ def peganomes(host, subs):
             for proto in ("https", "http"):
                 url = f"{proto}://{hostname}"
                 try:
-                    response = requests.get(url, timeout=3)
+                    response = requests.get(url)
                     print(f"[{response.status_code}] {url} -> {v}")
-                except Exception as e:
-                    print(f"[ERRO] {hostname} -> {e}")
-        except Exception as e:
-            print(f"[DNS FAIL] {hostname} -> {e}")
+                except Exception:
+                    return False
+        except Exception:
+            return False
 
-    with ThreadPoolExecutor(max_workers=40) as exe:
+    with ThreadPoolExecutor(max_workers=100) as exe:
         exe.map(check, subs, repeat(host))
 
 def portscanner(hostname):
-    print(f"[+] Rodando nmap em {hostname}")
     try:
         result = subprocess.run(
             ["nmap", "-Pn", "-T4", hostname],
             capture_output=True,
             text=True
         )
+        print("[+] Rodando nmap em {hostname}")
         print(result.stdout)
     except Exception as e:
-        print(f"Erro no nmap ({hostname}): {e}")
+        print("ERROR")
 
 def check_subdomain(sub, site):
     hostname = f"{sub}.{site}"
     url = f"https://{hostname}"
     try:
-        r = requests.get(url, timeout=5)
-        print(f"[+] {url} -> {r.status_code}")
+        r = requests.get(url)
         portscanner(hostname)
     except Exception:
         pass
@@ -107,7 +101,7 @@ def main_optimized(site):
         print(f"[+] Chunk com {len(valid_subs)} subdomínios válidos")
         if not valid_subs:
             continue
-        with ThreadPoolExecutor(max_workers=20) as exe:
+        with ThreadPoolExecutor(max_workers=80) as exe:
             exe.map(check_subdomain, valid_subs, repeat(site))
 
 def takeover(site):
@@ -129,7 +123,7 @@ def takeover(site):
                         if prov in str(rdata):
                             print(f"[!] Possível takeover detectado: {hostname} -> {rdata}")
             except Exception:
-                pass
+                return False
 
 # -----------------------------
 # Entry point
