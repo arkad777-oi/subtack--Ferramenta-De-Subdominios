@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+import requests
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
+import sys
+import socket
+from itertools import repeat
+import dns.resolver
+import time
+
+def meu():
+    ambiente = subprocess.run(
+        ["source", "meuambiente/bin/activate"],
+        capture_output=True,
+        text=True
+    )
+
+usuário = sys.argv[1]
+host = sys.argv[2]
+
+def peganomes(host, sub):
+    print("Bem Vindo a Ferramenta!")
+    print("--------------------------------------------------------------------------")
+    print("os nomes que pegamos estão aqui:")
+
+    def check(sub, host):
+        hostname = f"{sub}.{host}"
+        v = socket.gethostbyname(hostname)
+        for proto in ("https", "http"):
+            url = f"{proto}://{hostname}"
+            try:
+                response =  requests.get(url, timeout=3)
+                if response.status_code == 200:
+                    print(f"[200]{url}")
+                elif response.status_code == 404:
+                    print(f"[404] {url}")
+                elif response.status_code == 400:
+                    print(f"[400] {url}")
+                else:
+                    print(f"[?]{url}")
+                print(v)
+            except Exception as e:
+                print(f"[ERRO] {hostname} -> {e}")
+
+    with ThreadPoolExecutor(max_workers=40) as exe:
+       exe.map(check, sub, repeat(host))
+
+def portscanner(hostname):
+    print(f"[+] Rodando nmap em {hostname}")
+    try:
+        result = subprocess.run(
+            ["nmap", "-Pn", "-T4", hostname],
+            capture_output=True,
+            text=True
+        )
+        print(result.stdout)
+    except Exception as e:
+        print(f"Erro no nmap ({hostname}): {e}")
+
+def check_subdomain(sub, site):
+    hostname = f"{sub}.{site}"    
+    url = f"https://{hostname}"
+    try:    
+        r = requests.get(url, timeout=5)
+        print(f"[+] {url} -> {r.status_code}")
+        portscanner(hostname)
+    except Exception:
+        pass
+ 
+def main():
+    with open("textosub.txt") as f:
+        subs = f.read().splitlines()
+
+    with ThreadPoolExecutor(max_workers=2) as exe:
+        exe.map(check_subdomain, subs, repeat(host))
+
+def takeover(site):
+    print("--------------------------------------------------------------------------") 
+    print(f"[+] Verificando possíveis Takeovers em {site}") 
+    takeover_providers = [
+        "herokudns.com", "github.io", "amazonaws.com", "azurewebsites.net",
+        "shopify.com", "tumblr.com", "readthedocs.io", "bitbucket.io",
+        "ghost.io", "pantheon.io", "zendesk.com"
+    ]
+    with open("textosub.txt") as f:
+        subs = f.read().splitlines() 
+        for sub in subs:
+            hostname = f"{sub}.{site}" 
+            try:
+                answers = dns.resolver.resolve(hostname, "CNAME")
+                for rdata in answers:
+                    for prov in takeover_providers:
+                        if prov in str(rdata):
+                            print(f"[!] Possível takeover detectado: {hostname} -> {rdata}")
+            except Exception:
+                pass
+
+if __name__ == "__main__":
+    site = host 
+    with open("textosub.txt", "r") as f:
+        sub = f.read().splitlines() 
+
+if "-s" in usuário:
+    peganomes(site, sub)
+elif "-p" in usuário:
+    main()
+elif "-t" in usuário:
+    takeover(site)
