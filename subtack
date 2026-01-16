@@ -6,44 +6,78 @@ import sys
 import socket
 from itertools import repeat
 import dns.resolver
-import time
 
-def meu():
-    ambiente = subprocess.run(
-        ["source", "meuambiente/bin/activate"],
-        capture_output=True,
-        text=True
-    )
+ascii_art = r"""          _    _           _
+  ____  _| |__| |_ __ _ __| |__
+ (_-< || | '_ \  _/ _` / _| / /
+ /__/\_,_|_.__/\__\__,_\__|_\_\
+"""
+print(ascii_art)
 
 usuário = sys.argv[1]
 host = sys.argv[2]
 
-def peganomes(host, sub):
+# Resolver com timeout curto
+resolver = dns.resolver.Resolver()
+resolver.lifetime = 1.0
+resolver.timeout = 1.0
+
+# -----------------------------
+# Utils
+# -----------------------------
+def read_in_chunks(filename, chunk_size=200):
+    """Lê subdomínios em blocos menores e remove duplicatas"""
+    with open(filename) as f:
+        chunk = []
+        for line in f:
+            sub = line.strip()
+            if sub:
+                chunk.append(sub)
+            if len(chunk) >= chunk_size:
+                yield set(chunk)
+                chunk = []
+        if chunk:
+            yield set(chunk)
+
+def quick_filter(sub, site):
+    """Pré-filtragem leve: só passa se resolver DNS"""
+    hostname = f"{sub}.{site}"
+    try:
+        resolver.resolve(hostname, "A")
+        return True
+    except Exception:
+        return False
+
+def filter_subs(subs, site):
+    """Filtra em paralelo para acelerar"""
+    with ThreadPoolExecutor(max_workers=100) as exe:
+        results = list(exe.map(lambda s: (s, quick_filter(s, site)), subs))
+    return [s for s, ok in results if ok]
+
+# -----------------------------
+# Funções principais
+# -----------------------------
+def peganomes(host, subs):
     print("Bem Vindo a Ferramenta!")
     print("--------------------------------------------------------------------------")
     print("os nomes que pegamos estão aqui:")
 
     def check(sub, host):
         hostname = f"{sub}.{host}"
-        v = socket.gethostbyname(hostname)
-        for proto in ("https", "http"):
-            url = f"{proto}://{hostname}"
-            try:
-                response =  requests.get(url, timeout=3)
-                if response.status_code == 200:
-                    print(f"[200]{url}")
-                elif response.status_code == 404:
-                    print(f"[404] {url}")
-                elif response.status_code == 400:
-                    print(f"[400] {url}")
-                else:
-                    print(f"[?]{url}")
-                print(v)
-            except Exception as e:
-                print(f"[ERRO] {hostname} -> {e}")
+        try:
+            v = socket.gethostbyname(hostname)
+            for proto in ("https", "http"):
+                url = f"{proto}://{hostname}"
+                try:
+                    response = requests.get(url, timeout=3)
+                    print(f"[{response.status_code}] {url} -> {v}")
+                except Exception as e:
+                    print(f"[ERRO] {hostname} -> {e}")
+        except Exception as e:
+            print(f"[DNS FAIL] {hostname} -> {e}")
 
     with ThreadPoolExecutor(max_workers=40) as exe:
-       exe.map(check, sub, repeat(host))
+        exe.map(check, subs, repeat(host))
 
 def portscanner(hostname):
     print(f"[+] Rodando nmap em {hostname}")
@@ -58,36 +92,38 @@ def portscanner(hostname):
         print(f"Erro no nmap ({hostname}): {e}")
 
 def check_subdomain(sub, site):
-    hostname = f"{sub}.{site}"    
+    hostname = f"{sub}.{site}"
     url = f"https://{hostname}"
-    try:    
+    try:
         r = requests.get(url, timeout=5)
         print(f"[+] {url} -> {r.status_code}")
         portscanner(hostname)
     except Exception:
         pass
- 
-def main():
-    with open("textosub.txt") as f:
-        subs = f.read().splitlines()
 
-    with ThreadPoolExecutor(max_workers=2) as exe:
-        exe.map(check_subdomain, subs, repeat(host))
+def main_optimized(site):
+    for subs in read_in_chunks("textosub.txt", 200):
+        valid_subs = filter_subs(subs, site)
+        print(f"[+] Chunk com {len(valid_subs)} subdomínios válidos")
+        if not valid_subs:
+            continue
+        with ThreadPoolExecutor(max_workers=20) as exe:
+            exe.map(check_subdomain, valid_subs, repeat(site))
 
 def takeover(site):
-    print("--------------------------------------------------------------------------") 
-    print(f"[+] Verificando possíveis Takeovers em {site}") 
+    print("--------------------------------------------------------------------------")
+    print(f"[+] Verificando possíveis Takeovers em {site}")
     takeover_providers = [
         "herokudns.com", "github.io", "amazonaws.com", "azurewebsites.net",
         "shopify.com", "tumblr.com", "readthedocs.io", "bitbucket.io",
         "ghost.io", "pantheon.io", "zendesk.com"
     ]
-    with open("textosub.txt") as f:
-        subs = f.read().splitlines() 
-        for sub in subs:
-            hostname = f"{sub}.{site}" 
+    for subs in read_in_chunks("textosub.txt", 200):
+        valid_subs = filter_subs(subs, site)
+        for sub in valid_subs:
+            hostname = f"{sub}.{site}"
             try:
-                answers = dns.resolver.resolve(hostname, "CNAME")
+                answers = resolver.resolve(hostname, "CNAME")
                 for rdata in answers:
                     for prov in takeover_providers:
                         if prov in str(rdata):
@@ -95,14 +131,22 @@ def takeover(site):
             except Exception:
                 pass
 
+# -----------------------------
+# Entry point
+# -----------------------------
 if __name__ == "__main__":
-    site = host 
-    with open("textosub.txt", "r") as f:
-        sub = f.read().splitlines() 
+    site = host
 
-if "-s" in usuário:
-    peganomes(site, sub)
-elif "-p" in usuário:
-    main()
-elif "-t" in usuário:
-    takeover(site)
+    if "-s" in usuário:
+        for subs in read_in_chunks("textosub.txt", 200):
+            valid_subs = filter_subs(subs, site)
+            print(f"[+] Chunk com {len(valid_subs)} subdomínios válidos")
+            if not valid_subs:
+                continue
+            peganomes(site, valid_subs)
+
+    elif "-p" in usuário:
+        main_optimized(site)
+
+    elif "-t" in usuário:
+        takeover(site)
