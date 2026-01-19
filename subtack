@@ -20,9 +20,6 @@ host = sys.argv[2]
 resolver.lifetime = 1.0
 resolver.timeout = 1.0
 
-# -----------------------------
-# Utils
-# -----------------------------
 def read_in_chunks(filename, chunk_size=200):
     """Lê subdomínios em blocos menores e remove duplicatas"""
     with open(filename) as f:
@@ -52,9 +49,6 @@ def filter_subs(subs, site):
         results = list(exe.map(lambda s: (s, quick_filter(s, site)), subs))
     return [s for s, ok in results if ok]
 
-# -----------------------------
-# Funções principais
-# -----------------------------
 def peganomes(host, subs):
     def check(sub, host):
         hostname = f"{sub}.{host}"
@@ -124,9 +118,6 @@ def takeover(site):
             except Exception:
                 return False
 
-# -----------------------------
-# Entry point
-# -----------------------------
 if __name__ == "__main__":
     site = host
 
