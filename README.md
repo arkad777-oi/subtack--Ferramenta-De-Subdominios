@@ -8,7 +8,7 @@ Rodar portscan com **nmap** (`-p`)
 
 Verificar possíveis **takeovers** (`-t`)
 
-1. Crie o ambiente virtual automaticamente:
+Crie o ambiente virtual automaticamente:
 
 python3 meu.py
 
