@@ -1,7 +1,5 @@
 # subtack--Ferramenta-De-Subdominios
 
-# Ferramenta de Enumeração de Subdomínios
-
 Este projeto em Python permite:
 
 Descobrir subdomínios ativos (`-s`)
